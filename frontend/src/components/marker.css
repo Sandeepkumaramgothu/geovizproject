@@ -1,14 +1,9 @@
 /* src/components/marker.css */
 
 .marker {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background-color: blue;
-    cursor: pointer;
-  }
-  
-  .marker.selected {
-    background-color: red;
-  }
-  
+  background-size: cover;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+}

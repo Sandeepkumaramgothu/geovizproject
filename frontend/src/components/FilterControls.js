@@ -1,3 +1,5 @@
+// src/components/FilterControls.js
+
 import React, { useState, useEffect } from 'react';
 
 const FilterControls = ({ onFilterChange, properties, geoData }) => {
@@ -7,9 +9,9 @@ const FilterControls = ({ onFilterChange, properties, geoData }) => {
 
   useEffect(() => {
     if (selectedProperty) {
-      const uniqueValues = [...new Set(
-        geoData.features.map((feature) => feature.properties[selectedProperty])
-      )];
+      const uniqueValues = [
+        ...new Set(geoData.map((item) => item[selectedProperty]).filter(Boolean)),
+      ];
       setValues(uniqueValues);
     } else {
       setValues([]);
@@ -33,7 +35,9 @@ const FilterControls = ({ onFilterChange, properties, geoData }) => {
       <select value={selectedProperty} onChange={handlePropertyChange}>
         <option value="">Select Property</option>
         {properties.map((prop, index) => (
-          <option key={index} value={prop}>{prop}</option>
+          <option key={index} value={prop}>
+            {prop}
+          </option>
         ))}
       </select>
 
@@ -43,7 +47,9 @@ const FilterControls = ({ onFilterChange, properties, geoData }) => {
           <select value={selectedValue} onChange={handleValueChange}>
             <option value="">All</option>
             {values.map((val, index) => (
-              <option key={index} value={val}>{val}</option>
+              <option key={index} value={val}>
+                {val}
+              </option>
             ))}
           </select>
         </>
