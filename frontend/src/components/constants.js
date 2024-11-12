@@ -9,7 +9,6 @@ export const bigCities = [
   'Chicago',
   'Houston',
   'Phoenix',
-  // Add more big cities if needed
 ];
 
 export const states = [

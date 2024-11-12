@@ -1,5 +1,3 @@
-// src/components/styles.js
-
 const styles = {
   container: {
     display: 'flex',

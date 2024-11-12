@@ -1,5 +1,3 @@
-// src/components/MapView.js
-
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import Papa from 'papaparse';
@@ -18,15 +16,13 @@ import {
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import 'react-circular-progressbar/dist/styles.css';
 
-import styles from './styles'; // Ensure this file exists and is properly configured
-import preprocessData from './preprocessData'; // Ensure this file exists and is properly configured
-import { MAPBOX_TOKEN } from './constants'; // Ensure this file contains your Mapbox token
-import blueMarkerIcon from '../assets/images/custom-marker-blue.png'; // Ensure these assets exist
+import styles from './styles'; 
+import preprocessData from './preprocessData';
+import { MAPBOX_TOKEN } from './constants'; 
+import blueMarkerIcon from '../assets/images/custom-marker-blue.png'; 
 import redMarkerIcon from '../assets/images/custom-marker-red.png';
-import yellowMarkerIcon from '../assets/images/custom-marker-yellow.png'; // Add this icon for comparison markers
-import './marker.css'; // Ensure this CSS file exists for marker styling
-
-// Register Chart.js components
+import yellowMarkerIcon from '../assets/images/custom-marker-yellow.png'; //comparison markers
+import './marker.css'; 
 ChartJS.register(
   RadialLinearScale,
   CategoryScale,
@@ -42,7 +38,7 @@ ChartJS.register(
 // Set Mapbox access token
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-// Custom Loading Bar Component
+// Loading Bar 
 const LoadingBar = ({ progress }) => (
   <div style={{ width: '100%', backgroundColor: '#ddd', height: '10px', borderRadius: '5px' }}>
     <div
@@ -58,7 +54,6 @@ const LoadingBar = ({ progress }) => (
 );
 
 const MapView = () => {
-  // State Variables
   const [map, setMap] = useState(null);
   const [geoData, setGeoData] = useState([]);
   const [numericHeaders, setNumericHeaders] = useState([]);
@@ -87,14 +82,11 @@ const MapView = () => {
   const [dataNeedsGeocoding, setDataNeedsGeocoding] = useState(false);
   const [compareMarkersEnabled, setCompareMarkersEnabled] = useState(false);
   const [stateCoordinates, setStateCoordinates] = useState({});
-
-  // Global Min and Max for Normalization
   const [globalMinMax, setGlobalMinMax] = useState({});
 
   // Ref for map container
   const mapContainerRef = useRef(null);
 
-  // Initialize Map on component mount
   useEffect(() => {
     const initializeMap = new mapboxgl.Map({
       container: mapContainerRef.current,
@@ -102,8 +94,6 @@ const MapView = () => {
       center: [-98.5795, 39.8283], // Centered on USA
       zoom: 3,
     });
-
-    // Add navigation control (zoom buttons)
     const nav = new mapboxgl.NavigationControl();
     initializeMap.addControl(nav, 'top-right');
 
@@ -151,8 +141,6 @@ const MapView = () => {
       return { latitude: null, longitude: null };
     }
   }, []);
-
-  // Generate Chart Data for Selected Location
   const generateChartData = useCallback(
     (locationData) => {
       if (locationData) {
@@ -219,12 +207,11 @@ const MapView = () => {
       setSelectedState2('');
       setCompareMarkersEnabled(false);
 
-      // If the clicked state is already selected, deselect it
+      //clicked state is already selected, deselect it
       if (selectedLocation && selectedLocation.state === locationData.state) {
         setSelectedLocation(null);
         setChartData(null);
       } else {
-        // Select the clicked state and generate chart data for it
         setSelectedLocation(locationData);
         generateChartData(locationData);
       }
@@ -239,7 +226,6 @@ const MapView = () => {
     } else {
       setChartData(null);
     }
-    // We can safely omit generateChartData from dependencies because it doesn't change
   }, [selectedLocation]);
 
   // Preprocess Data Function
@@ -251,15 +237,11 @@ const MapView = () => {
       const cleanRawData = rawData.filter(
         (item) => item !== null && item !== undefined && Object.keys(item).length > 0
       );
-
-      // Determine if data contains latitude and longitude
       const dataContainsLatLng = cleanRawData.some(
         (item) => item.latitude && item.longitude
       );
 
       setDataNeedsGeocoding(!dataContainsLatLng);
-
-      // Determine the location column dynamically (case-insensitive)
       const possibleLocationColumns = ['state', 'province', 'city'];
       let detectedLocationColumn = possibleLocationColumns.find((col) =>
         cleanRawData[0] &&
@@ -289,8 +271,6 @@ const MapView = () => {
       }
 
       setProgress((prev) => ({ ...prev, preprocess: 50 }));
-
-      // Initialize state data aggregation
       const stateDataMap = {};
       const stateCoordsMap = {};
       const numericFields = new Set();
@@ -359,8 +339,6 @@ const MapView = () => {
       }
 
       setProgress((prev) => ({ ...prev, preprocess: 80 }));
-
-      // Calculate averages for numeric fields
       const aggregatedData = Object.values(stateDataMap).map((item) => {
         const count = item.count || 1;
         numericFields.forEach((key) => {
@@ -377,7 +355,7 @@ const MapView = () => {
       setGeoData(aggregatedData);
       setStateCoordinates(stateCoordsMap);
 
-      // Identify numeric and string headers
+      // checking  numeric and string headers
       if (aggregatedData.length > 0) {
         const headers = Object.keys(aggregatedData[0]);
         const numeric = [];
@@ -406,8 +384,6 @@ const MapView = () => {
             strings.push(header);
           }
         });
-
-        // Calculate global min and max for each numeric field BEFORE setting state
         const globalMinMaxCalc = {};
         numeric.forEach((header) => {
           const values = aggregatedData.map((item) => parseFloat(item[header]));
@@ -423,8 +399,6 @@ const MapView = () => {
 
         setTotalRows(aggregatedData.length);
         setTotalColumns(headers.length);
-
-        // Extract unique states for comparison
         const uniqueStates = Object.keys(stateDataMap);
         setStateList(uniqueStates);
       } else {
@@ -438,8 +412,6 @@ const MapView = () => {
     },
     [reverseGeocodeState, geocodeLocation, preprocessData]
   );
-
-  // Handle File Upload
   const handleFileUpload = (event) => {
     setProgress({
       upload: 0,
@@ -477,7 +449,7 @@ const MapView = () => {
           header: true,
           skipEmptyLines: true,
           beforeFirstChunk: (chunk) => {
-            // Handle datasets with metadata rows
+            //datasets with metadata rows
             const lines = chunk.trim().split('\n');
             const dataStartIndex = lines.findIndex(
               (line) =>
@@ -511,7 +483,7 @@ const MapView = () => {
     }
   };
 
-  // Monitor Progress Updates
+  //Progress indicators
   useEffect(() => {
     if (progress.preprocess === 100) {
       setProgressMessages((prev) => ({
@@ -530,7 +502,7 @@ const MapView = () => {
     }
   }, [progress.geocode]);
 
-  // Markers on Map
+  // Markerson Map
   const renderMarkers = useCallback(() => {
     if (map && geoData.length > 0) {
       if (stateList.length === 0) {
@@ -538,7 +510,7 @@ const MapView = () => {
         return;
       }
 
-      // Remove existing markers
+      //Removed existing markers
       markers.forEach((marker) => marker.remove());
       const newMarkers = [];
 
@@ -573,8 +545,6 @@ const MapView = () => {
           const marker = new mapboxgl.Marker(el)
             .setLngLat([longitude, latitude])
             .addTo(map);
-
-          // Add popup with state name
           const popup = new mapboxgl.Popup({ offset: 25 }).setText(stateName);
           marker.setPopup(popup);
 
@@ -607,15 +577,14 @@ const MapView = () => {
     handleLocationSelect,
   ]);
 
-  // Re-render markers when selectedLocation or comparison changes
+  // Re-render markers  selectedLocation or comparison changes
   useEffect(() => {
     if (markersAdded) {
       renderMarkers();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLocation, compareMarkersEnabled]);
 
-  // Handle State Comparison Selection
+  //Comparison Selected state
   const handleStateSelection = () => {
     if (selectedState1 && selectedState2) {
       const data1 = geoData.find((item) => item.state === selectedState1);
@@ -665,12 +634,10 @@ const MapView = () => {
       setSelectedLocation(null);
       setCompareMarkersEnabled(true);
 
-      // Render the markers for the selected states
+      // selected states
       renderMarkers();
     }
   };
-
-  // Chart Options
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -731,14 +698,9 @@ const MapView = () => {
 
   return (
     <div style={styles.container}>
-      {/* Map Container */}
       <div ref={mapContainerRef} style={styles.map}></div>
-
-      {/* Sidebar */}
       <div style={styles.sidebar}>
-        {/* Combined Controls Box */}
         <div style={styles.combinedBox}>
-          {/* Progress Indicators */}
           <div style={styles.progressContainer}>
             <div style={styles.progressItem}>
               <LoadingBar progress={progress.upload} />
@@ -766,8 +728,6 @@ const MapView = () => {
               style={styles.fileInput}
             />
           </div>
-
-          {/* Mark Locations Button */}
           {geoData.length > 0 && stateList.length > 0 && !markersAdded && (
             <div style={styles.section}>
               <button

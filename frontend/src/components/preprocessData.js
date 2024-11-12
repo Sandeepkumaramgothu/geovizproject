@@ -1,10 +1,6 @@
-// src/components/preprocessData.js
-
 import axios from 'axios';
 import { MAPBOX_TOKEN } from './constants';
 
-
-// Function to geocode location names (e.g., cities) to get coordinates
 const geocodeLocation = async (locationName) => {
   if (!locationName) return { latitude: null, longitude: null };
   try {
@@ -31,20 +27,19 @@ const geocodeLocation = async (locationName) => {
   }
 };
 
-// Main preprocess function
+//Main preprocess
 const preprocessData = async (data, setProgress) => {
-  // Initialize progress
   setProgress((prev) => ({ ...prev, preprocess: 0 }));
 
-  const limitedData = data.slice(0, 100000); // Limit data to 100,000 rows
+  const limitedData = data.slice(0, 100000); 
 
   setProgress((prev) => ({ ...prev, preprocess: 10 }));
 
-  // Define possible column names for latitude and longitude
+  //possible column names for latitude and longitude
   const possibleLatitudeFields = ['latitude', 'Latitude', 'lat', 'Lat', 'LATITUDE', 'LAT'];
   const possibleLongitudeFields = ['longitude', 'Longitude', 'lon', 'Lng', 'Long', 'LONGITUDE', 'LNG', 'LON'];
 
-  // Define possible location fields
+  //possible location fields
   const possibleLocationFields = [
     'city',
     'City',
@@ -60,14 +55,14 @@ const preprocessData = async (data, setProgress) => {
     'STATE_NAME',
   ];
 
-  // Map dataset columns to standard names
+  // Mapdataset columns to standard names
   const firstRow = limitedData[0];
 
-  // Map latitude field
+  // Maplatitude field
   let latitudeField = possibleLatitudeFields.find((field) => field in firstRow);
-  // Map longitude field
+  // Maplongitude field
   let longitudeField = possibleLongitudeFields.find((field) => field in firstRow);
-  // Map location field
+  // Maplocation field
   let locationField = possibleLocationFields.find((field) => field in firstRow);
 
   setProgress((prev) => ({ ...prev, preprocess: 20 }));
@@ -103,12 +98,12 @@ const preprocessData = async (data, setProgress) => {
   let dataWithCoords;
 
   if (latitudeField && longitudeField) {
-    // We have latitude and longitude, no need to geocode
+    //check latitude and longitude, no need to geocode
     dataWithCoords = cleanData.map((item) => {
       const latitude = parseFloat(item[latitudeField]);
       const longitude = parseFloat(item[longitudeField]);
 
-      // Remove any existing latitude and longitude fields to avoid confusion
+      // Removeexisting latitude and longitude fields to avoid muultiple location selecction
       possibleLatitudeFields.forEach((field) => {
         delete item[field];
       });
@@ -119,7 +114,7 @@ const preprocessData = async (data, setProgress) => {
       return { ...item, latitude, longitude };
     });
   } else if (locationField) {
-    // We need to geocode the location names to get coordinates
+    //geocode the location names to get coordinates
     dataWithCoords = await Promise.all(
       cleanData.map(async (item) => {
         let latitude = null;
@@ -130,7 +125,7 @@ const preprocessData = async (data, setProgress) => {
         latitude = coords.latitude;
         longitude = coords.longitude;
 
-        // Remove any existing latitude and longitude fields to avoid confusion
+        // Removeexisting latitude and longitude fields to avoid muultiple location selecction
         possibleLatitudeFields.forEach((field) => {
           delete item[field];
         });
@@ -142,13 +137,13 @@ const preprocessData = async (data, setProgress) => {
       })
     );
   } else {
-    // No location data, proceed without coordinates
+    // Nolocation data, proceed without coordinates
     dataWithCoords = cleanData;
   }
 
   setProgress((prev) => ({ ...prev, preprocess: 70 }));
 
-  // Proceed to extract numeric and string headers even without location data
+  // given  numeric and string headers even without location data
 
   setProgress((prev) => ({ ...prev, preprocess: 90 }));
 

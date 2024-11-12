@@ -1,12 +1,10 @@
-// src/components/FilterControls.js
-
 import React, { useState, useEffect } from 'react';
-
 const FilterControls = ({ onFilterChange, properties, geoData }) => {
   const [selectedProperty, setSelectedProperty] = useState('');
   const [values, setValues] = useState([]);
   const [selectedValue, setSelectedValue] = useState('');
 
+  // Update the list of unique values whenever the selected property or geoData changes
   useEffect(() => {
     if (selectedProperty) {
       const uniqueValues = [
@@ -19,14 +17,18 @@ const FilterControls = ({ onFilterChange, properties, geoData }) => {
     setSelectedValue('');
   }, [selectedProperty, geoData]);
 
+  // Handle changes to the selected property
   const handlePropertyChange = (event) => {
-    setSelectedProperty(event.target.value);
-    onFilterChange(event.target.value, '');
+    const property = event.target.value;
+    setSelectedProperty(property);
+    onFilterChange(property, '');
   };
 
+  // Handle changes to the selected value
   const handleValueChange = (event) => {
-    setSelectedValue(event.target.value);
-    onFilterChange(selectedProperty, event.target.value);
+    const value = event.target.value;
+    setSelectedValue(value);
+    onFilterChange(selectedProperty, value);
   };
 
   return (
@@ -34,8 +36,8 @@ const FilterControls = ({ onFilterChange, properties, geoData }) => {
       <label>Filter by Property: </label>
       <select value={selectedProperty} onChange={handlePropertyChange}>
         <option value="">Select Property</option>
-        {properties.map((prop, index) => (
-          <option key={index} value={prop}>
+        {properties.map((prop) => (
+          <option key={prop} value={prop}>
             {prop}
           </option>
         ))}
@@ -46,8 +48,8 @@ const FilterControls = ({ onFilterChange, properties, geoData }) => {
           <label> Filter by Value: </label>
           <select value={selectedValue} onChange={handleValueChange}>
             <option value="">All</option>
-            {values.map((val, index) => (
-              <option key={index} value={val}>
+            {values.map((val) => (
+              <option key={val} value={val}>
                 {val}
               </option>
             ))}

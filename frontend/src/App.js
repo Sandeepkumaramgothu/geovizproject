@@ -1,8 +1,6 @@
-// src/App.js
-
 import React from 'react';
 import MapView from './components/MapView';
-import './App.css'; // Import the CSS file for styling
+import './App.css'; 
 
 function App() {
   return (
