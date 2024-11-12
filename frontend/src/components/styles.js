@@ -3,141 +3,107 @@
 const styles = {
   container: {
     display: 'flex',
-    flexDirection: 'row',
     height: '100vh',
-    backgroundColor: '#f0f2f5',
-    '@media (max-width: 768px)': {
-      flexDirection: 'column',
-    },
   },
   map: {
-    flex: 1,
-    height: '100%',
-    border: '2px solid #ddd',
-    borderRadius: '8px',
-    margin: '10px',
-    '@media (max-width: 768px)': {
-      height: '50vh',
-    },
+    width: '65%',
+    height: '100vh',
   },
   sidebar: {
-    flex: 1,
-    padding: '20px',
-    backgroundColor: '#fff',
-    borderLeft: '2px solid #ddd',
+    width: '45%',
+    padding: '5px',
     overflowY: 'auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-    '@media (max-width: 768px)': {
-      borderLeft: 'none',
-      borderTop: '2px solid #ddd',
-      height: '50vh',
-    },
+    backgroundColor: '#f7f9fc',
+    borderLeft: '2px solid #ddd',
   },
   combinedBox: {
-    padding: '15px',
-    border: '2px solid #ddd',
-    borderRadius: '8px',
-    backgroundColor: '#f9f9f9',
+    marginBottom: '10px',
+  },
+  progressContainer: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '15px',
+    gap: '2px',
+    marginBottom: '10px',
+  },
+  progressItem: {
+    marginBottom: '10px',
+  },
+  progressMessage: {
+    marginTop: '5px',
+    fontSize: '14px',
+    textAlign: 'center',
+    color: '#555',
   },
   section: {
-    marginBottom: '10px',
+    marginBottom: '5px',
+    padding: '2px',
+    backgroundColor: '#fff',
+    borderRadius: '3px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
   },
   sectionTitle: {
-    fontSize: '18px',
+    fontSize: '12px',
     fontWeight: 'bold',
-    marginBottom: '10px',
+    marginBottom: '5px',
     color: '#333',
   },
-  chartContainer: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  chartWrapper: {
-    width: '500px',       // Set width to a fixed value
-    height: '500px',      // Set height to the same fixed value
-    border: '1px solid #ddd',
-    borderRadius: '8px',
-    backgroundColor: '#fff',
-    margin: '0 auto',     // Center the chart horizontally
-    position: 'relative', // For positioning chart content
-  },
-  chartContent: {
-    position: 'absolute',
-    top: '10px',    // Adjust for padding if needed
-    left: '10px',   // Adjust for padding if needed
-    right: '10px',  // Adjust for padding if needed
-    bottom: '10px', // Adjust for padding if needed
-  },
   fileInput: {
-    padding: '10px',
     width: '100%',
-    cursor: 'pointer',
-    borderRadius: '5px',
-    border: '1px solid #ddd',
+    padding: '8px',
+    fontSize: '12px',
+    borderRadius: '2px',
   },
   datasetDetails: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '5px',
+    fontSize: '12px',
+    color: '#666',
+  },
+  inputGroup: {
+    marginBottom: '5px',
+  },
+  inputLabel: {
+    display: 'block',
+    marginBottom: '5px',
+    fontSize: '12px',
     color: '#555',
+  },
+  selectDropdown: {
+    width: '100%',
+    padding: '8px',
+    fontSize: '12px',
+    border: '1px solid #ccc',
+    borderRadius: '4px',
   },
   chartOptions: {
     display: 'flex',
     flexWrap: 'wrap',
-    gap: '10px',
-    marginTop: '10px',
+    gap: '5px',
+    marginTop: '5px',
   },
   chartButton: {
-    padding: '10px 15px',
-    cursor: 'pointer',
-    borderRadius: '5px',
-    border: '1px solid #ddd',
-    backgroundColor: '#007BFF',
+    flex: '1 1 calc(50% - 10px)',
+    padding: '5px',
+    backgroundColor: '#007bff',
     color: '#fff',
-    transition: 'background-color 0.3s ease',
-    fontWeight: 'bold',
+    border: 'none',
+    cursor: 'pointer',
+    textAlign: 'center',
+    borderRadius: '4px',
   },
   chartButtonActive: {
     backgroundColor: '#0056b3',
   },
-  progressContainer: {
-    display: 'flex',
-    justifyContent: 'space-around',
+  chartContainer: {
     marginTop: '20px',
   },
-  progressItem: {
-    width: '80px',
-    height: '80px',
-    textAlign: 'center',
-  },
-  progressMessage: {
-    marginTop: '5px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    marginTop: '10px',
-  },
-  inputLabel: {
-    fontWeight: 'bold',
-    marginBottom: '5px',
-  },
-  selectDropdown: {
-    padding: '8px',
-    borderRadius: '5px',
-    border: '1px solid #ddd',
+  chartWrapper: {
+    position: 'relative',
     width: '100%',
+    height: '300px',
+  },
+  chartContent: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
   },
 };
 

@@ -1,6 +1,6 @@
 // src/components/MapView.js
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import Papa from 'papaparse';
 import { Bar, Pie, Doughnut, PolarArea } from 'react-chartjs-2';
@@ -16,14 +16,14 @@ import {
   Legend,
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
-import { CircularProgressbar } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 
 import styles from './styles'; // Ensure this file exists and is properly configured
 import preprocessData from './preprocessData'; // Ensure this file exists and is properly configured
-import { MAPBOX_TOKEN } from './constants'; // Ensure this file exists and contains your Mapbox token
+import { MAPBOX_TOKEN } from './constants'; // Ensure this file contains your Mapbox token
 import blueMarkerIcon from '../assets/images/custom-marker-blue.png'; // Ensure these assets exist
 import redMarkerIcon from '../assets/images/custom-marker-red.png';
+import yellowMarkerIcon from '../assets/images/custom-marker-yellow.png'; // Add this icon for comparison markers
 import './marker.css'; // Ensure this CSS file exists for marker styling
 
 // Register Chart.js components
@@ -42,6 +42,21 @@ ChartJS.register(
 // Set Mapbox access token
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
+// Custom Loading Bar Component
+const LoadingBar = ({ progress }) => (
+  <div style={{ width: '100%', backgroundColor: '#ddd', height: '10px', borderRadius: '5px' }}>
+    <div
+      style={{
+        width: `${progress}%`,
+        height: '100%',
+        backgroundColor: '#28a745',
+        borderRadius: '5px',
+        transition: 'width 0.3s ease',
+      }}
+    ></div>
+  </div>
+);
+
 const MapView = () => {
   // State Variables
   const [map, setMap] = useState(null);
@@ -54,7 +69,6 @@ const MapView = () => {
   const [totalRows, setTotalRows] = useState(0);
   const [totalColumns, setTotalColumns] = useState(0);
   const [markers, setMarkers] = useState([]);
-  const [currentPopup, setCurrentPopup] = useState(null);
   const [progress, setProgress] = useState({
     upload: 0,
     preprocess: 0,
@@ -65,23 +79,31 @@ const MapView = () => {
     preprocess: '',
     geocode: '',
   });
-  const [cityList, setCityList] = useState([]);
-  const [selectedCity1, setSelectedCity1] = useState('');
-  const [selectedCity2, setSelectedCity2] = useState('');
+  const [stateList, setStateList] = useState([]);
+  const [selectedState1, setSelectedState1] = useState('');
+  const [selectedState2, setSelectedState2] = useState('');
   const [locationColumn, setLocationColumn] = useState('');
-  const [columnValueCounts, setColumnValueCounts] = useState({});
   const [markersAdded, setMarkersAdded] = useState(false);
+  const [dataNeedsGeocoding, setDataNeedsGeocoding] = useState(false);
+  const [compareMarkersEnabled, setCompareMarkersEnabled] = useState(false);
+  const [stateCoordinates, setStateCoordinates] = useState({});
 
-  // Initialize Map
+  // Global Min and Max for Normalization
+  const [globalMinMax, setGlobalMinMax] = useState({});
+
+  // Ref for map container
+  const mapContainerRef = useRef(null);
+
+  // Initialize Map on component mount
   useEffect(() => {
     const initializeMap = new mapboxgl.Map({
-      container: 'map', // HTML container id
-      style: 'mapbox://styles/mapbox/streets-v11', // style URL
-      center: [-98.5795, 39.8283], // starting position [lng, lat] (center of USA)
-      zoom: 3, // starting zoom
+      container: mapContainerRef.current,
+      style: 'mapbox://styles/mapbox/streets-v11',
+      center: [-98.5795, 39.8283], // Centered on USA
+      zoom: 3,
     });
 
-    // Add navigation control (the +/- zoom buttons)
+    // Add navigation control (zoom buttons)
     const nav = new mapboxgl.NavigationControl();
     initializeMap.addControl(nav, 'top-right');
 
@@ -91,64 +113,290 @@ const MapView = () => {
     return () => initializeMap.remove();
   }, []);
 
+  // Reverse Geocode Function to get State Name
+  const reverseGeocodeState = useCallback(async (latitude, longitude) => {
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?types=region&access_token=${MAPBOX_TOKEN}`
+      );
+      const data = await response.json();
+      if (data.features && data.features.length > 0) {
+        return data.features[0].text.trim().toUpperCase();
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Reverse geocoding error:', error);
+      return null;
+    }
+  }, []);
+
+  // Geocode Function to get coordinates from location name
+  const geocodeLocation = useCallback(async (locationName) => {
+    if (!locationName) return { latitude: null, longitude: null };
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+          locationName
+        )}.json?access_token=${MAPBOX_TOKEN}&limit=1`
+      );
+      const data = await response.json();
+      if (data.features && data.features.length > 0) {
+        const [longitude, latitude] = data.features[0].center;
+        return { latitude, longitude };
+      }
+      return { latitude: null, longitude: null };
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      return { latitude: null, longitude: null };
+    }
+  }, []);
+
+  // Generate Chart Data for Selected Location
+  const generateChartData = useCallback(
+    (locationData) => {
+      if (locationData) {
+        const locationValues = numericHeaders.map((header) => ({
+          label: header,
+          value: parseFloat(locationData[header]) || 0,
+        }));
+
+        const normalizedValues = locationValues.map((item) => {
+          const { min, max } = globalMinMax[item.label] || { min: 0, max: 1 };
+          const normalizedValue =
+            max !== min ? ((item.value - min) / (max - min)) * 9.5 + 0.5 : 5;
+          return {
+            label: item.label,
+            normalizedValue: isFinite(normalizedValue) ? normalizedValue : 0.5,
+            actualValue: item.value,
+          };
+        });
+
+        setChartData({
+          labels: normalizedValues.map((item) => item.label),
+          datasets: [
+            {
+              label: locationData.state,
+              data: normalizedValues.map((item) => item.normalizedValue),
+              actualValues: normalizedValues.map((item) => item.actualValue),
+              backgroundColor: [
+                'rgba(255, 99, 132, 0.5)',
+                'rgba(54, 162, 235, 0.5)',
+                'rgba(255, 206, 86, 0.5)',
+                'rgba(75, 192, 192, 0.5)',
+                'rgba(153, 102, 255, 0.5)',
+                'rgba(255, 159, 64, 0.5)',
+                'rgba(255, 99, 132, 0.5)',
+                'rgba(54, 162, 235, 0.5)',
+                'rgba(255, 206, 86, 0.5)',
+              ],
+              borderColor: [
+                'rgba(255, 99, 132, 1)',
+                'rgba(54, 162, 235, 1)',
+                'rgba(255, 206, 86, 1)',
+                'rgba(75, 192, 192, 1)',
+                'rgba(153, 102, 255, 1)',
+                'rgba(255, 159, 64, 1)',
+                'rgba(255, 99, 132, 1)',
+                'rgba(54, 162, 235, 1)',
+                'rgba(255, 206, 86, 1)',
+              ],
+              borderWidth: 1,
+            },
+          ],
+        });
+      }
+    },
+    [numericHeaders, globalMinMax]
+  );
+
+  // Handle Location Selection from Map
+  const handleLocationSelect = useCallback(
+    (locationData) => {
+      console.log('Marker clicked:', locationData);
+
+      setSelectedState1('');
+      setSelectedState2('');
+      setCompareMarkersEnabled(false);
+
+      // If the clicked state is already selected, deselect it
+      if (selectedLocation && selectedLocation.state === locationData.state) {
+        setSelectedLocation(null);
+        setChartData(null);
+      } else {
+        // Select the clicked state and generate chart data for it
+        setSelectedLocation(locationData);
+        generateChartData(locationData);
+      }
+    },
+    [selectedLocation, generateChartData]
+  );
+
+  // Data Generation
+  useEffect(() => {
+    if (selectedLocation) {
+      generateChartData(selectedLocation);
+    } else {
+      setChartData(null);
+    }
+    // We can safely omit generateChartData from dependencies because it doesn't change
+  }, [selectedLocation]);
+
   // Preprocess Data Function
   const handlePreprocess = useCallback(
     async (rawData) => {
-      // Determine the location column dynamically
-      const possibleLocationColumns = [
-        'LocationDesc',
-        'LocationAbbr',
-        'state',
-        'State',
-        'city',
-        'City',
-        'Country',
-        'Country Name',
-        'Country Code',
-        'Address',
-        'Place',
-        'GeoLocation',
-        // Include more possible location columns if necessary
-      ];
-      let detectedLocationColumn = possibleLocationColumns.find(
-        (col) => rawData[0] && rawData[0].hasOwnProperty(col)
+      setProgress((prev) => ({ ...prev, preprocess: 0 }));
+
+      // Remove null, undefined, and inconsistent data rows
+      const cleanRawData = rawData.filter(
+        (item) => item !== null && item !== undefined && Object.keys(item).length > 0
       );
 
-      // If no location column is found, use 'locationID'
-      if (!detectedLocationColumn) {
-        detectedLocationColumn = 'locationID';
-      }
+      // Determine if data contains latitude and longitude
+      const dataContainsLatLng = cleanRawData.some(
+        (item) => item.latitude && item.longitude
+      );
 
-      setLocationColumn(detectedLocationColumn);
+      setDataNeedsGeocoding(!dataContainsLatLng);
+
+      // Determine the location column dynamically (case-insensitive)
+      const possibleLocationColumns = ['state', 'province', 'city'];
+      let detectedLocationColumn = possibleLocationColumns.find((col) =>
+        cleanRawData[0] &&
+        Object.keys(cleanRawData[0]).some((key) => key.toLowerCase() === col.toLowerCase())
+      );
+
+      setLocationColumn(detectedLocationColumn || '');
+
       console.log('Detected Location Column:', detectedLocationColumn);
 
-      // Preprocess data
-      const processedData = await preprocessData(
-        rawData,
-        setProgress,
-        detectedLocationColumn
-      );
-
-      if (!processedData || processedData.length === 0) {
-        alert('No valid data after preprocessing.');
+      if (!detectedLocationColumn && !dataContainsLatLng) {
+        alert('No valid location column found in the dataset.');
         return;
       }
 
-      setGeoData(processedData);
+      // Preprocess data
+      const processedData = await preprocessData(
+        cleanRawData,
+        setProgress
+      );
+
+      console.log('Number of Data Points After Preprocessing:', processedData.length);
+
+      if (!processedData || processedData.length === 0) {
+        alert('No data available after filtering.');
+        return;
+      }
+
+      setProgress((prev) => ({ ...prev, preprocess: 50 }));
+
+      // Initialize state data aggregation
+      const stateDataMap = {};
+      const stateCoordsMap = {};
+      const numericFields = new Set();
+
+      if (detectedLocationColumn || dataContainsLatLng) {
+        for (const item of processedData) {
+          let stateName = '';
+
+          if (detectedLocationColumn) {
+            stateName = item[detectedLocationColumn];
+            if (detectedLocationColumn.toLowerCase().includes('city')) {
+              // If the location column is a city, we need to get the state name
+              const coords = await geocodeLocation(stateName);
+              if (coords.latitude && coords.longitude) {
+                stateName = await reverseGeocodeState(coords.latitude, coords.longitude);
+                if (!stateName) continue;
+              } else {
+                continue;
+              }
+            } else {
+              stateName = stateName.trim().toUpperCase();
+            }
+          } else if (dataContainsLatLng) {
+            const latitude = parseFloat(item.latitude);
+            const longitude = parseFloat(item.longitude);
+            if (!isNaN(latitude) && !isNaN(longitude)) {
+              stateName = await reverseGeocodeState(latitude, longitude);
+              if (stateName) {
+                stateName = stateName.trim().toUpperCase();
+              } else {
+                continue;
+              }
+            } else {
+              continue;
+            }
+          }
+
+          if (!stateName) continue;
+
+          // Aggregate data per state
+          if (!stateDataMap[stateName]) {
+            stateDataMap[stateName] = { ...item };
+            stateDataMap[stateName].state = stateName;
+            stateDataMap[stateName].count = 1;
+
+            // Store coordinates for the first occurrence
+            const latitude = parseFloat(item.latitude);
+            const longitude = parseFloat(item.longitude);
+            if (!isNaN(latitude) && !isNaN(longitude)) {
+              stateCoordsMap[stateName] = { latitude, longitude };
+            }
+          } else {
+            // Sum numeric fields
+            Object.keys(item).forEach((key) => {
+              if (key.toLowerCase() === 'state') return;
+              const value = parseFloat(item[key]);
+              if (!isNaN(value)) {
+                numericFields.add(key);
+                stateDataMap[stateName][key] =
+                  (stateDataMap[stateName][key] || 0) + value;
+              }
+            });
+            stateDataMap[stateName].count += 1;
+          }
+        }
+      }
+
+      setProgress((prev) => ({ ...prev, preprocess: 80 }));
+
+      // Calculate averages for numeric fields
+      const aggregatedData = Object.values(stateDataMap).map((item) => {
+        const count = item.count || 1;
+        numericFields.forEach((key) => {
+          const parsedValue = parseFloat(item[key]);
+          if (!isNaN(parsedValue)) {
+            item[key] = parsedValue / count;
+          } else {
+            item[key] = 0;
+          }
+        });
+        return item;
+      });
+
+      setGeoData(aggregatedData);
+      setStateCoordinates(stateCoordsMap);
 
       // Identify numeric and string headers
-      if (processedData.length > 0) {
-        const headers = Object.keys(processedData[0]);
+      if (aggregatedData.length > 0) {
+        const headers = Object.keys(aggregatedData[0]);
         const numeric = [];
         const strings = [];
 
         headers.forEach((header) => {
           if (
-            ['latitude', 'longitude', 'GeoLocation', 'locationID'].includes(header)
+            [
+              'latitude',
+              'longitude',
+              'GeoLocation',
+              'locationID',
+              'count',
+              'state',
+            ].includes(header)
           )
             return;
 
-          const isNumeric = processedData.every((item) => {
+          const isNumeric = aggregatedData.every((item) => {
             const value = parseFloat(item[header]);
             return !isNaN(value);
           });
@@ -159,50 +407,37 @@ const MapView = () => {
           }
         });
 
+        // Calculate global min and max for each numeric field BEFORE setting state
+        const globalMinMaxCalc = {};
+        numeric.forEach((header) => {
+          const values = aggregatedData.map((item) => parseFloat(item[header]));
+          globalMinMaxCalc[header] = {
+            min: Math.min(...values),
+            max: Math.max(...values),
+          };
+        });
+        setGlobalMinMax(globalMinMaxCalc);
+
         setNumericHeaders(numeric);
         setStringHeaders(strings);
 
-        setTotalRows(processedData.length);
+        setTotalRows(aggregatedData.length);
         setTotalColumns(headers.length);
 
-        // Count non-null values per column
-        const columnCounts = {};
-        headers.forEach((header) => {
-          const count = processedData.filter(
-            (item) => item[header] !== null && item[header] !== ''
-          ).length;
-          columnCounts[header] = count;
-        });
-
-        setColumnValueCounts(columnCounts);
-
-        // Extract unique locations for comparison
-        const uniqueLocations = [
-          ...new Set(
-            processedData.map((item) => item[detectedLocationColumn]).filter(Boolean)
-          ),
-        ];
-        setCityList(uniqueLocations);
+        // Extract unique states for comparison
+        const uniqueStates = Object.keys(stateDataMap);
+        setStateList(uniqueStates);
       } else {
         alert('No data available after filtering.');
       }
 
+      setProgress((prev) => ({ ...prev, preprocess: 100 }));
+
       // Reset markersAdded state when new data is uploaded
       setMarkersAdded(false);
     },
-    []
+    [reverseGeocodeState, geocodeLocation, preprocessData]
   );
-
-  // Generate a human-readable label for the location
-  const getLocationLabel = (data) => {
-    if (data[locationColumn]) return data[locationColumn];
-    if (data.city) return data.city;
-    if (data.state) return data.state;
-    if (data.address) return data.address;
-    return `Lat: ${parseFloat(data.latitude).toFixed(2)}, Lng: ${parseFloat(
-      data.longitude
-    ).toFixed(2)}`;
-  };
 
   // Handle File Upload
   const handleFileUpload = (event) => {
@@ -246,9 +481,11 @@ const MapView = () => {
             const lines = chunk.trim().split('\n');
             const dataStartIndex = lines.findIndex(
               (line) =>
-                line.startsWith('Country Name') ||
-                line.startsWith('state') ||
-                line.startsWith('RowId')
+                line.toLowerCase().startsWith('country name') ||
+                line.toLowerCase().startsWith('state') ||
+                line.toLowerCase().startsWith('rowid') ||
+                line.toLowerCase().startsWith('longitude') ||
+                line.toLowerCase().startsWith('latitude')
             );
             if (dataStartIndex > 0) {
               return lines.slice(dataStartIndex).join('\n');
@@ -293,178 +530,40 @@ const MapView = () => {
     }
   }, [progress.geocode]);
 
-  // Handle Location Selection from Map
-  const handleLocationSelect = (locationData) => {
-    // Clear city selections if a map marker is selected
-    setSelectedCity1('');
-    setSelectedCity2('');
-    if (selectedLocation && selectedLocation.locationID === locationData.locationID) {
-      setSelectedLocation(null); // Deselect
-      setChartData(null);
-      if (currentPopup) currentPopup.remove();
-    } else {
-      setSelectedLocation(locationData);
-      setChartData(null);
-      if (currentPopup) currentPopup.remove();
-    }
-  };
-
-  // Handle Location Comparison Selection
-  const handleCitySelection = () => {
-    if (selectedCity1 && selectedCity2) {
-      const data1 = geoData.filter(
-        (item) => item[locationColumn] === selectedCity1
-      );
-      const data2 = geoData.filter(
-        (item) => item[locationColumn] === selectedCity2
-      );
-
-      if (data1.length === 0 || data2.length === 0) {
-        alert('One or both selected locations have no data.');
+  // Markers on Map
+  const renderMarkers = useCallback(() => {
+    if (map && geoData.length > 0) {
+      if (stateList.length === 0) {
+        alert('Data is not aggregated by state. Cannot mark locations on the map.');
         return;
       }
 
-      // Aggregate data (e.g., average)
-      const aggregatedData1 = {};
-      const aggregatedData2 = {};
-
-      numericHeaders.forEach((header) => {
-        const values1 = data1.map((item) => parseFloat(item[header]) || 0);
-        const values2 = data2.map((item) => parseFloat(item[header]) || 0);
-
-        const avg1 = values1.reduce((a, b) => a + b, 0) / (values1.length || 1);
-        const avg2 = values2.reduce((a, b) => a + b, 0) / (values2.length || 1);
-
-        aggregatedData1[header] = avg1;
-        aggregatedData2[header] = avg2;
-      });
-
-      // Normalize data for chart display (0.5% to 10%)
-      const dataMin = 0; // Minimum data value
-      const dataMax = Math.max(
-        ...Object.values(aggregatedData1),
-        ...Object.values(aggregatedData2)
-      );
-      const range = dataMax - dataMin || 1; // Avoid division by zero
-
-      const normalizedData1 = {};
-      const normalizedData2 = {};
-      const actualData1 = {};
-      const actualData2 = {};
-
-      numericHeaders.forEach((header) => {
-        normalizedData1[header] =
-          ((aggregatedData1[header] - dataMin) / range) * 9.5 + 0.5;
-        normalizedData2[header] =
-          ((aggregatedData2[header] - dataMin) / range) * 9.5 + 0.5;
-        actualData1[header] = aggregatedData1[header];
-        actualData2[header] = aggregatedData2[header];
-      });
-
-      // Prepare chart data
-      const labels = numericHeaders;
-      const dataSet = {
-        labels,
-        datasets: [
-          {
-            label: selectedCity1,
-            data: numericHeaders.map((header) => normalizedData1[header]),
-            actualValues: numericHeaders.map((header) => actualData1[header]),
-            backgroundColor: 'rgba(255, 99, 132, 0.5)',
-            borderColor: 'rgba(255, 99, 132, 1)',
-            borderWidth: 1,
-          },
-          {
-            label: selectedCity2,
-            data: numericHeaders.map((header) => normalizedData2[header]),
-            actualValues: numericHeaders.map((header) => actualData2[header]),
-            backgroundColor: 'rgba(54, 162, 235, 0.5)',
-            borderColor: 'rgba(54, 162, 235, 1)',
-            borderWidth: 1,
-          },
-        ],
-      };
-
-      setChartData(dataSet);
-      setSelectedLocation(null); // Deselect any single location
-      if (currentPopup) currentPopup.remove();
-    }
-  };
-
-  
-  const generateChartData = useCallback(() => {
-    if (selectedLocation) {
-      const locationValues = numericHeaders.map((header) => ({
-        label: header,
-        value: parseFloat(selectedLocation[header]) || 0,
-      }));
-
-     
-      const dataMin = 0; // Minimum data value
-      const dataMax = Math.max(...locationValues.map((item) => item.value));
-      const range = dataMax - dataMin || 1; // Avoid division by zero
-
-      const normalizedValues = locationValues.map((item) => ({
-        label: item.label,
-        normalizedValue: ((item.value - dataMin) / range) * 9.5 + 0.5,
-        actualValue: item.value, // Keep the actual value
-      }));
-
-      setChartData({
-        labels: normalizedValues.map((item) => item.label),
-        datasets: [
-          {
-            label: getLocationLabel(selectedLocation),
-            data: normalizedValues.map((item) => item.normalizedValue),
-            actualValues: normalizedValues.map((item) => item.actualValue), // Store actual values
-            backgroundColor: [
-              'rgba(255, 99, 132, 0.5)',
-              'rgba(54, 162, 235, 0.5)',
-              'rgba(255, 206, 86, 0.5)',
-              'rgba(75, 192, 192, 0.5)',
-              'rgba(153, 102, 255, 0.5)',
-              'rgba(255, 159, 64, 0.5)',
-              
-            ],
-            borderColor: [
-              'rgba(255, 99, 132, 1)',
-              'rgba(54, 162, 235, 1)',
-              'rgba(255, 206, 86, 1)',
-              'rgba(75, 192, 192, 1)',
-              'rgba(153, 102, 255, 1)',
-              'rgba(255, 159, 64, 1)',
-             
-            ],
-            borderWidth: 1,
-          },
-        ],
-      });
-    }
-  }, [selectedLocation, numericHeaders]);
-
-  //Data Generation
-  useEffect(() => {
-    generateChartData();
-  }, [generateChartData, chartType]);
-
-  //Markers on Map
-  const renderMarkers = useCallback(() => {
-    if (map && geoData.length > 0) {
       // Remove existing markers
       markers.forEach((marker) => marker.remove());
       const newMarkers = [];
 
       geoData.forEach((data) => {
-        const latitude = parseFloat(data.latitude);
-        const longitude = parseFloat(data.longitude);
+        const stateName = data.state;
+        const coords = stateCoordinates[stateName];
+        if (!coords) return;
+
+        const latitude = parseFloat(coords.latitude);
+        const longitude = parseFloat(coords.longitude);
 
         if (!isNaN(latitude) && !isNaN(longitude)) {
           const el = document.createElement('div');
           el.className = 'marker';
           const isSelected = selectedLocation
-            ? selectedLocation.locationID === data.locationID
+            ? selectedLocation.state === data.state
             : false;
-          const icon = isSelected ? redMarkerIcon : blueMarkerIcon;
+          const isCompared = compareMarkersEnabled
+            ? [selectedState1, selectedState2].includes(stateName)
+            : false;
+          const icon = isSelected
+            ? redMarkerIcon
+            : isCompared
+            ? yellowMarkerIcon
+            : blueMarkerIcon;
           el.style.backgroundImage = `url(${icon})`;
           el.style.width = '30px';
           el.style.height = '30px';
@@ -475,6 +574,10 @@ const MapView = () => {
             .setLngLat([longitude, latitude])
             .addTo(map);
 
+          // Add popup with state name
+          const popup = new mapboxgl.Popup({ offset: 25 }).setText(stateName);
+          marker.setPopup(popup);
+
           marker.getElement().addEventListener('click', () => {
             handleLocationSelect(data);
           });
@@ -483,23 +586,89 @@ const MapView = () => {
         }
       });
       setMarkers(newMarkers);
-      setMarkersAdded(true); 
+      setMarkersAdded(true);
 
-    
       setProgress((prev) => ({ ...prev, geocode: 100 }));
       setProgressMessages((prev) => ({
         ...prev,
         geocode: 'Locations marked on the map.',
       }));
     }
-  }, [map, geoData, selectedLocation]);
+  }, [
+    map,
+    geoData,
+    selectedLocation,
+    stateCoordinates,
+    markers,
+    stateList,
+    compareMarkersEnabled,
+    selectedState1,
+    selectedState2,
+    handleLocationSelect,
+  ]);
 
-  // Re-render markers when selectedLocation changes to update marker colors
+  // Re-render markers when selectedLocation or comparison changes
   useEffect(() => {
     if (markersAdded) {
       renderMarkers();
     }
-  }, [selectedLocation, renderMarkers, markersAdded]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLocation, compareMarkersEnabled]);
+
+  // Handle State Comparison Selection
+  const handleStateSelection = () => {
+    if (selectedState1 && selectedState2) {
+      const data1 = geoData.find((item) => item.state === selectedState1);
+      const data2 = geoData.find((item) => item.state === selectedState2);
+
+      if (!data1 || !data2) {
+        alert('One or both selected states have no data.');
+        return;
+      }
+
+      const labels = numericHeaders;
+      const dataset = {
+        labels,
+        datasets: [
+          {
+            label: selectedState1,
+            data: numericHeaders.map((header) => {
+              const value = data1[header] || 0;
+              const { min, max } = globalMinMax[header] || { min: 0, max: 1 };
+              const normalizedValue =
+                max !== min ? ((value - min) / (max - min)) * 9.5 + 0.5 : 5;
+              return isFinite(normalizedValue) ? normalizedValue : 0.5;
+            }),
+            actualValues: numericHeaders.map((header) => data1[header] || 0),
+            backgroundColor: 'rgba(255, 99, 132, 0.5)',
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 1,
+          },
+          {
+            label: selectedState2,
+            data: numericHeaders.map((header) => {
+              const value = data2[header] || 0;
+              const { min, max } = globalMinMax[header] || { min: 0, max: 1 };
+              const normalizedValue =
+                max !== min ? ((value - min) / (max - min)) * 9.5 + 0.5 : 5;
+              return isFinite(normalizedValue) ? normalizedValue : 0.5;
+            }),
+            actualValues: numericHeaders.map((header) => data2[header] || 0),
+            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1,
+          },
+        ],
+      };
+
+      setChartData(dataset);
+      setSelectedLocation(null);
+      setCompareMarkersEnabled(true);
+
+      // Render the markers for the selected states
+      renderMarkers();
+    }
+  };
 
   // Chart Options
   const chartOptions = {
@@ -522,15 +691,23 @@ const MapView = () => {
       datalabels: {
         display: true,
         color: '#000',
-        align: 'center', // Align labels to the center of the bars
+        align: 'center',
         anchor: 'center',
         formatter: function (value, context) {
           const dataset = context.chart.data.datasets[context.datasetIndex];
           if (dataset.actualValues) {
             const actualValue = dataset.actualValues[context.dataIndex];
-            return actualValue.toFixed(2); // Display actual value
+            if (typeof actualValue === 'number' && isFinite(actualValue)) {
+              return actualValue.toFixed(2);
+            } else {
+              return '';
+            }
           } else {
-            return value.toFixed(2);
+            if (typeof value === 'number' && isFinite(value)) {
+              return value.toFixed(2);
+            } else {
+              return '';
+            }
           }
         },
       },
@@ -538,11 +715,13 @@ const MapView = () => {
         callbacks: {
           label: function (context) {
             const dataset = context.dataset;
-            if (dataset.actualValues) {
-              const actualValue = dataset.actualValues[context.dataIndex];
+            const actualValue = dataset.actualValues
+              ? dataset.actualValues[context.dataIndex]
+              : context.parsed.y;
+            if (typeof actualValue === 'number' && isFinite(actualValue)) {
               return `${context.label}: ${actualValue.toFixed(2)}`;
             } else {
-              return `${context.label}: ${context.parsed.y}`;
+              return `${context.label}: ${actualValue || ''}`;
             }
           },
         },
@@ -553,7 +732,7 @@ const MapView = () => {
   return (
     <div style={styles.container}>
       {/* Map Container */}
-      <div id="map" style={styles.map}></div>
+      <div ref={mapContainerRef} style={styles.map}></div>
 
       {/* Sidebar */}
       <div style={styles.sidebar}>
@@ -562,38 +741,19 @@ const MapView = () => {
           {/* Progress Indicators */}
           <div style={styles.progressContainer}>
             <div style={styles.progressItem}>
-              <CircularProgressbar
-                value={progress.upload}
-                text={`${Math.round(progress.upload)}%`}
-                styles={{
-                  root: { width: '80px' },
-                  text: { fontSize: '10px' },
-                }}
-              />
+              <LoadingBar progress={progress.upload} />
               <div style={styles.progressMessage}>{progressMessages.upload}</div>
             </div>
             <div style={styles.progressItem}>
-              <CircularProgressbar
-                value={progress.preprocess}
-                text={`${Math.round(progress.preprocess)}%`}
-                styles={{
-                  root: { width: '80px' },
-                  text: { fontSize: '10px' },
-                }}
-              />
+              <LoadingBar progress={progress.preprocess} />
               <div style={styles.progressMessage}>{progressMessages.preprocess}</div>
             </div>
-            <div style={styles.progressItem}>
-              <CircularProgressbar
-                value={progress.geocode}
-                text={`${Math.round(progress.geocode)}%`}
-                styles={{
-                  root: { width: '80px' },
-                  text: { fontSize: '10px' },
-                }}
-              />
-              <div style={styles.progressMessage}>{progressMessages.geocode}</div>
-            </div>
+            {dataNeedsGeocoding && (
+              <div style={styles.progressItem}>
+                <LoadingBar progress={progress.geocode} />
+                <div style={styles.progressMessage}>{progressMessages.geocode}</div>
+              </div>
+            )}
           </div>
 
           {/* Upload Data Section */}
@@ -608,7 +768,7 @@ const MapView = () => {
           </div>
 
           {/* Mark Locations Button */}
-          {geoData.length > 0 && !markersAdded && (
+          {geoData.length > 0 && stateList.length > 0 && !markersAdded && (
             <div style={styles.section}>
               <button
                 onClick={renderMarkers}
@@ -647,52 +807,61 @@ const MapView = () => {
           </div>
 
           {/* Location Comparison Section */}
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>Compare Two Locations</h3>
-            <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>Location 1:</label>
-              <select
-                value={selectedCity1}
-                onChange={(e) => setSelectedCity1(e.target.value)}
-                style={styles.selectDropdown}
-                disabled={cityList.length === 0}
+          {stateList.length >= 2 ? (
+            <div style={styles.section}>
+              <h3 style={styles.sectionTitle}>Compare Two States</h3>
+              <div style={styles.inputGroup}>
+                <label style={styles.inputLabel}>State 1:</label>
+                <select
+                  value={selectedState1}
+                  onChange={(e) => setSelectedState1(e.target.value)}
+                  style={styles.selectDropdown}
+                  disabled={stateList.length === 0}
+                >
+                  <option value="">Select State</option>
+                  {stateList.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.inputLabel}>State 2:</label>
+                <select
+                  value={selectedState2}
+                  onChange={(e) => setSelectedState2(e.target.value)}
+                  style={styles.selectDropdown}
+                  disabled={stateList.length === 0}
+                >
+                  <option value="">Select State</option>
+                  {stateList.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={handleStateSelection}
+                disabled={!selectedState1 || !selectedState2}
+                style={{
+                  ...styles.chartButton,
+                  backgroundColor:
+                    selectedState1 && selectedState2 ? '#28a745' : '#6c757d',
+                }}
               >
-                <option value="">Select Location</option>
-                {cityList.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
+                Compare
+              </button>
             </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>Location 2:</label>
-              <select
-                value={selectedCity2}
-                onChange={(e) => setSelectedCity2(e.target.value)}
-                style={styles.selectDropdown}
-                disabled={cityList.length === 0}
-              >
-                <option value="">Select Location</option>
-                {cityList.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
+          ) : geoData.length > 0 ? (
+            <div style={styles.section}>
+              <h3 style={styles.sectionTitle}>Compare Two States</h3>
+              <p style={{ color: '#6c757d' }}>
+                Comparison is Enabled when the dataset contains at least two unique states.
+              </p>
             </div>
-            <button
-              onClick={handleCitySelection}
-              disabled={!selectedCity1 || !selectedCity2}
-              style={{
-                ...styles.chartButton,
-                backgroundColor:
-                  selectedCity1 && selectedCity2 ? '#28a745' : '#6c757d',
-              }}
-            >
-              Compare
-            </button>
-          </div>
+          ) : null}
 
           {/* Chart Type Selection Section */}
           <div style={styles.section}>

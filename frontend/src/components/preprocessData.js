@@ -1,28 +1,17 @@
-
+// src/components/preprocessData.js
 
 import axios from 'axios';
-import { MAPBOX_TOKEN, MAPBOX_GEOCODING_URL } from './constants';
+import { MAPBOX_TOKEN } from './constants';
 
 
-const extractCoordinates = (geoLocation) => {
-  if (!geoLocation) return { latitude: null, longitude: null };
-  const regex = /POINT\s*\(\s*([-.\d]+)\s+([-.\d]+)\s*\)/i;
-  const match = geoLocation.match(regex);
-  if (match) {
-    return {
-      longitude: parseFloat(match[1]),
-      latitude: parseFloat(match[2]),
-    };
-  }
-  return { latitude: null, longitude: null };
-};
-
-
+// Function to geocode location names (e.g., cities) to get coordinates
 const geocodeLocation = async (locationName) => {
   if (!locationName) return { latitude: null, longitude: null };
   try {
     const response = await axios.get(
-      `${MAPBOX_GEOCODING_URL}${encodeURIComponent(locationName)}.json`,
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+        locationName
+      )}.json`,
       {
         params: {
           access_token: MAPBOX_TOKEN,
@@ -42,132 +31,130 @@ const geocodeLocation = async (locationName) => {
   }
 };
 
-/**
- * Preprocesses raw data to extract coordinates, classify locations, and structure data for visualization.
- * @param {Array} data - The raw data array (from CSV or JSON).
- * @param {Function} setProgress - Function to update progress percentages.
- * @param {string} locationColumn - The column name that contains location information.
- * @returns {Promise<Array>} - The processed and cleaned data array.
- */
-const preprocessData = async (data, setProgress, locationColumn) => {
+// Main preprocess function
+const preprocessData = async (data, setProgress) => {
   // Initialize progress
-  setProgress({
-    upload: 100,
-    preprocess: 0,
-    geocode: 0,
-  });
+  setProgress((prev) => ({ ...prev, preprocess: 0 }));
 
-
-  const limitedData = data.slice(0, 100000);
+  const limitedData = data.slice(0, 100000); // Limit data to 100,000 rows
 
   setProgress((prev) => ({ ...prev, preprocess: 10 }));
 
- 
-  const possibleLatitudeFields = ['latitude', 'Latitude', 'lat', 'Lat'];
-  const possibleLongitudeFields = ['longitude', 'Longitude', 'lon', 'Lng', 'Long'];
+  // Define possible column names for latitude and longitude
+  const possibleLatitudeFields = ['latitude', 'Latitude', 'lat', 'Lat', 'LATITUDE', 'LAT'];
+  const possibleLongitudeFields = ['longitude', 'Longitude', 'lon', 'Lng', 'Long', 'LONGITUDE', 'LNG', 'LON'];
 
-  let latitudeField = null;
-  let longitudeField = null;
+  // Define possible location fields
+  const possibleLocationFields = [
+    'city',
+    'City',
+    'CITY',
+    'county',
+    'County',
+    'COUNTY',
+    'state',
+    'State',
+    'STATE',
+    'state_name',
+    'State_Name',
+    'STATE_NAME',
+  ];
 
-  if (limitedData.length > 0) {
-    latitudeField = possibleLatitudeFields.find((field) =>
-      limitedData[0].hasOwnProperty(field)
-    );
-    longitudeField = possibleLongitudeFields.find((field) =>
-      limitedData[0].hasOwnProperty(field)
-    );
-  } else {
-    alert('The dataset is empty.');
-    return [];
-  }
+  // Map dataset columns to standard names
+  const firstRow = limitedData[0];
+
+  // Map latitude field
+  let latitudeField = possibleLatitudeFields.find((field) => field in firstRow);
+  // Map longitude field
+  let longitudeField = possibleLongitudeFields.find((field) => field in firstRow);
+  // Map location field
+  let locationField = possibleLocationFields.find((field) => field in firstRow);
 
   setProgress((prev) => ({ ...prev, preprocess: 20 }));
 
-  
   const requiredFields = [];
   if (!latitudeField || !longitudeField) {
-    requiredFields.push(locationColumn);
+    if (locationField) {
+      requiredFields.push(locationField);
+    }
   }
 
   const cleanData = limitedData.filter((row) => {
-    return requiredFields.every(
-      (field) =>
-        row.hasOwnProperty(field) &&
-        row[field] !== null &&
-        row[field] !== undefined &&
-        row[field] !== ''
-    );
+    if (requiredFields.length > 0) {
+      return requiredFields.every(
+        (field) =>
+          row.hasOwnProperty(field) &&
+          row[field] !== null &&
+          row[field] !== undefined &&
+          row[field].toString().trim() !== ''
+      );
+    } else {
+      return row !== null && row !== undefined && Object.keys(row).length > 0;
+    }
   });
 
   if (cleanData.length === 0) {
-    alert('No valid data after filtering out rows with missing critical fields.');
+    alert('No data available after filtering out rows with missing critical fields.');
     return [];
   }
 
   setProgress((prev) => ({ ...prev, preprocess: 30 }));
 
+  let dataWithCoords;
 
-  if (!latitudeField || !longitudeField) {
-    if (cleanData.length > 0) {
-      latitudeField = possibleLatitudeFields.find((field) =>
-        cleanData[0].hasOwnProperty(field)
-      );
-      longitudeField = possibleLongitudeFields.find((field) =>
-        cleanData[0].hasOwnProperty(field)
-      );
-    }
+  if (latitudeField && longitudeField) {
+    // We have latitude and longitude, no need to geocode
+    dataWithCoords = cleanData.map((item) => {
+      const latitude = parseFloat(item[latitudeField]);
+      const longitude = parseFloat(item[longitudeField]);
+
+      // Remove any existing latitude and longitude fields to avoid confusion
+      possibleLatitudeFields.forEach((field) => {
+        delete item[field];
+      });
+      possibleLongitudeFields.forEach((field) => {
+        delete item[field];
+      });
+
+      return { ...item, latitude, longitude };
+    });
+  } else if (locationField) {
+    // We need to geocode the location names to get coordinates
+    dataWithCoords = await Promise.all(
+      cleanData.map(async (item) => {
+        let latitude = null;
+        let longitude = null;
+        let locationName = item[locationField];
+
+        const coords = await geocodeLocation(locationName);
+        latitude = coords.latitude;
+        longitude = coords.longitude;
+
+        // Remove any existing latitude and longitude fields to avoid confusion
+        possibleLatitudeFields.forEach((field) => {
+          delete item[field];
+        });
+        possibleLongitudeFields.forEach((field) => {
+          delete item[field];
+        });
+
+        return { ...item, latitude, longitude };
+      })
+    );
+  } else {
+    // No location data, proceed without coordinates
+    dataWithCoords = cleanData;
   }
-
-
-  const dataWithCoords = await Promise.all(
-    cleanData.map(async (item) => {
-      let latitude = null;
-      let longitude = null;
-
-      if (latitudeField && longitudeField) {
-        latitude = parseFloat(item[latitudeField]);
-        longitude = parseFloat(item[longitudeField]);
-      } else if (item.GeoLocation) {
-        const coords = extractCoordinates(item.GeoLocation);
-        latitude = coords.latitude;
-        longitude = coords.longitude;
-      } else if (item[locationColumn] && locationColumn !== 'locationID') {
-        // Geocode if we have a location name
-        const coords = await geocodeLocation(item[locationColumn]);
-        latitude = coords.latitude;
-        longitude = coords.longitude;
-      }
-
-      const locationID =
-        latitude !== null && longitude !== null
-          ? `${latitude.toFixed(5)},${longitude.toFixed(5)}`
-          : null;
-
-      return { ...item, latitude, longitude, locationID };
-    })
-  );
 
   setProgress((prev) => ({ ...prev, preprocess: 70 }));
 
-
-  const cleanDataWithCoords = dataWithCoords.filter(
-    (item) =>
-      item.latitude !== null &&
-      item.longitude !== null &&
-      !isNaN(item.latitude) &&
-      !isNaN(item.longitude)
-  );
-
-  if (cleanDataWithCoords.length === 0) {
-    alert('No valid data after extracting coordinates.');
-    return [];
-  }
+  // Proceed to extract numeric and string headers even without location data
 
   setProgress((prev) => ({ ...prev, preprocess: 90 }));
 
   setProgress((prev) => ({ ...prev, preprocess: 100 }));
 
-  return cleanDataWithCoords;
+  return dataWithCoords;
 };
 
 export default preprocessData;
