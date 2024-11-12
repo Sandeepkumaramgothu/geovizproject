@@ -1,5 +1,15 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+
+
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import Papa from 'papaparse';
 import { Bar, Pie, Doughnut, PolarArea } from 'react-chartjs-2';
 import {
@@ -15,14 +25,16 @@ import {
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import 'react-circular-progressbar/dist/styles.css';
+import domtoimage from 'dom-to-image-more';
 
-import styles from './styles'; 
+import styles from './styles';
 import preprocessData from './preprocessData';
-import { MAPBOX_TOKEN } from './constants'; 
-import blueMarkerIcon from '../assets/images/custom-marker-blue.png'; 
+import { MAPBOX_TOKEN } from './constants';
+import blueMarkerIcon from '../assets/images/custom-marker-blue.png';
 import redMarkerIcon from '../assets/images/custom-marker-red.png';
-import yellowMarkerIcon from '../assets/images/custom-marker-yellow.png'; //comparison markers
-import './marker.css'; 
+import yellowMarkerIcon from '../assets/images/custom-marker-yellow.png';
+import './marker.css';
+
 ChartJS.register(
   RadialLinearScale,
   CategoryScale,
@@ -35,12 +47,17 @@ ChartJS.register(
   ChartDataLabels
 );
 
-// Set Mapbox access token
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-// Loading Bar 
 const LoadingBar = ({ progress }) => (
-  <div style={{ width: '100%', backgroundColor: '#ddd', height: '10px', borderRadius: '5px' }}>
+  <div
+    style={{
+      width: '100%',
+      backgroundColor: '#ddd',
+      height: '10px',
+      borderRadius: '5px',
+    }}
+  >
     <div
       style={{
         width: `${progress}%`,
@@ -53,7 +70,7 @@ const LoadingBar = ({ progress }) => (
   </div>
 );
 
-const MapView = () => {
+const MapView = forwardRef((props, ref) => {
   const [map, setMap] = useState(null);
   const [geoData, setGeoData] = useState([]);
   const [numericHeaders, setNumericHeaders] = useState([]);
@@ -84,26 +101,37 @@ const MapView = () => {
   const [stateCoordinates, setStateCoordinates] = useState({});
   const [globalMinMax, setGlobalMinMax] = useState({});
 
-  // Ref for map container
   const mapContainerRef = useRef(null);
+  const containerRef = useRef(null);
+  const sidebarRef = useRef(null);
+  const uploadRef = useRef(null);
+  const progressRef = useRef(null);
 
   useEffect(() => {
     const initializeMap = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: 'mapbox://styles/mapbox/streets-v11',
-      center: [-98.5795, 39.8283], // Centered on USA
+      center: [-98.5795, 39.8283],
       zoom: 3,
+      preserveDrawingBuffer: true,
     });
     const nav = new mapboxgl.NavigationControl();
     initializeMap.addControl(nav, 'top-right');
 
+    initializeMap.getCanvas().addEventListener('webglcontextlost', (event) => {
+      event.preventDefault();
+      console.error('WebGL context lost');
+    });
+
+    initializeMap.getCanvas().addEventListener('webglcontextrestored', () => {
+      console.log('WebGL context restored');
+    });
+
     setMap(initializeMap);
 
-    // Clean up on unmount
     return () => initializeMap.remove();
   }, []);
 
-  // Reverse Geocode Function to get State Name
   const reverseGeocodeState = useCallback(async (latitude, longitude) => {
     try {
       const response = await fetch(
@@ -121,7 +149,6 @@ const MapView = () => {
     }
   }, []);
 
-  // Geocode Function to get coordinates from location name
   const geocodeLocation = useCallback(async (locationName) => {
     if (!locationName) return { latitude: null, longitude: null };
     try {
@@ -141,6 +168,7 @@ const MapView = () => {
       return { latitude: null, longitude: null };
     }
   }, []);
+
   const generateChartData = useCallback(
     (locationData) => {
       if (locationData) {
@@ -198,7 +226,6 @@ const MapView = () => {
     [numericHeaders, globalMinMax]
   );
 
-  // Handle Location Selection from Map
   const handleLocationSelect = useCallback(
     (locationData) => {
       console.log('Marker clicked:', locationData);
@@ -207,7 +234,6 @@ const MapView = () => {
       setSelectedState2('');
       setCompareMarkersEnabled(false);
 
-      //clicked state is already selected, deselect it
       if (selectedLocation && selectedLocation.state === locationData.state) {
         setSelectedLocation(null);
         setChartData(null);
@@ -219,7 +245,6 @@ const MapView = () => {
     [selectedLocation, generateChartData]
   );
 
-  // Data Generation
   useEffect(() => {
     if (selectedLocation) {
       generateChartData(selectedLocation);
@@ -228,14 +253,13 @@ const MapView = () => {
     }
   }, [selectedLocation]);
 
-  // Preprocess Data Function
   const handlePreprocess = useCallback(
     async (rawData) => {
       setProgress((prev) => ({ ...prev, preprocess: 0 }));
 
-      // Remove null, undefined, and inconsistent data rows
       const cleanRawData = rawData.filter(
-        (item) => item !== null && item !== undefined && Object.keys(item).length > 0
+        (item) =>
+          item !== null && item !== undefined && Object.keys(item).length > 0
       );
       const dataContainsLatLng = cleanRawData.some(
         (item) => item.latitude && item.longitude
@@ -245,7 +269,9 @@ const MapView = () => {
       const possibleLocationColumns = ['state', 'province', 'city'];
       let detectedLocationColumn = possibleLocationColumns.find((col) =>
         cleanRawData[0] &&
-        Object.keys(cleanRawData[0]).some((key) => key.toLowerCase() === col.toLowerCase())
+        Object.keys(cleanRawData[0]).some(
+          (key) => key.toLowerCase() === col.toLowerCase()
+        )
       );
 
       setLocationColumn(detectedLocationColumn || '');
@@ -257,13 +283,12 @@ const MapView = () => {
         return;
       }
 
-      // Preprocess data
-      const processedData = await preprocessData(
-        cleanRawData,
-        setProgress
-      );
+      const processedData = await preprocessData(cleanRawData, setProgress);
 
-      console.log('Number of Data Points After Preprocessing:', processedData.length);
+      console.log(
+        'Number of Data Points After Preprocessing:',
+        processedData.length
+      );
 
       if (!processedData || processedData.length === 0) {
         alert('No data available after filtering.');
@@ -282,10 +307,12 @@ const MapView = () => {
           if (detectedLocationColumn) {
             stateName = item[detectedLocationColumn];
             if (detectedLocationColumn.toLowerCase().includes('city')) {
-              // If the location column is a city, we need to get the state name
               const coords = await geocodeLocation(stateName);
               if (coords.latitude && coords.longitude) {
-                stateName = await reverseGeocodeState(coords.latitude, coords.longitude);
+                stateName = await reverseGeocodeState(
+                  coords.latitude,
+                  coords.longitude
+                );
                 if (!stateName) continue;
               } else {
                 continue;
@@ -310,20 +337,17 @@ const MapView = () => {
 
           if (!stateName) continue;
 
-          // Aggregate data per state
           if (!stateDataMap[stateName]) {
             stateDataMap[stateName] = { ...item };
             stateDataMap[stateName].state = stateName;
             stateDataMap[stateName].count = 1;
 
-            // Store coordinates for the first occurrence
             const latitude = parseFloat(item.latitude);
             const longitude = parseFloat(item.longitude);
             if (!isNaN(latitude) && !isNaN(longitude)) {
               stateCoordsMap[stateName] = { latitude, longitude };
             }
           } else {
-            // Sum numeric fields
             Object.keys(item).forEach((key) => {
               if (key.toLowerCase() === 'state') return;
               const value = parseFloat(item[key]);
@@ -355,7 +379,6 @@ const MapView = () => {
       setGeoData(aggregatedData);
       setStateCoordinates(stateCoordsMap);
 
-      // checking  numeric and string headers
       if (aggregatedData.length > 0) {
         const headers = Object.keys(aggregatedData[0]);
         const numeric = [];
@@ -407,11 +430,11 @@ const MapView = () => {
 
       setProgress((prev) => ({ ...prev, preprocess: 100 }));
 
-      // Reset markersAdded state when new data is uploaded
       setMarkersAdded(false);
     },
-    [reverseGeocodeState, geocodeLocation, preprocessData]
+    [reverseGeocodeState, geocodeLocation]
   );
+
   const handleFileUpload = (event) => {
     setProgress({
       upload: 0,
@@ -449,7 +472,6 @@ const MapView = () => {
           header: true,
           skipEmptyLines: true,
           beforeFirstChunk: (chunk) => {
-            //datasets with metadata rows
             const lines = chunk.trim().split('\n');
             const dataStartIndex = lines.findIndex(
               (line) =>
@@ -483,7 +505,6 @@ const MapView = () => {
     }
   };
 
-  //Progress indicators
   useEffect(() => {
     if (progress.preprocess === 100) {
       setProgressMessages((prev) => ({
@@ -502,7 +523,6 @@ const MapView = () => {
     }
   }, [progress.geocode]);
 
-  // Markerson Map
   const renderMarkers = useCallback(() => {
     if (map && geoData.length > 0) {
       if (stateList.length === 0) {
@@ -510,7 +530,6 @@ const MapView = () => {
         return;
       }
 
-      //Removed existing markers
       markers.forEach((marker) => marker.remove());
       const newMarkers = [];
 
@@ -525,6 +544,9 @@ const MapView = () => {
         if (!isNaN(latitude) && !isNaN(longitude)) {
           const el = document.createElement('div');
           el.className = 'marker';
+
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
           const isSelected = selectedLocation
             ? selectedLocation.state === data.state
             : false;
@@ -536,11 +558,12 @@ const MapView = () => {
             : isCompared
             ? yellowMarkerIcon
             : blueMarkerIcon;
-          el.style.backgroundImage = `url(${icon})`;
-          el.style.width = '30px';
-          el.style.height = '30px';
-          el.style.backgroundSize = 'contain';
-          el.style.cursor = 'pointer';
+          img.src = icon;
+          img.style.width = '30px';
+          img.style.height = '30px';
+          img.style.cursor = 'pointer';
+
+          el.appendChild(img);
 
           const marker = new mapboxgl.Marker(el)
             .setLngLat([longitude, latitude])
@@ -577,14 +600,12 @@ const MapView = () => {
     handleLocationSelect,
   ]);
 
-  // Re-render markers  selectedLocation or comparison changes
   useEffect(() => {
     if (markersAdded) {
       renderMarkers();
     }
   }, [selectedLocation, compareMarkersEnabled]);
 
-  //Comparison Selected state
   const handleStateSelection = () => {
     if (selectedState1 && selectedState2) {
       const data1 = geoData.find((item) => item.state === selectedState1);
@@ -634,7 +655,6 @@ const MapView = () => {
       setSelectedLocation(null);
       setCompareMarkersEnabled(true);
 
-      // selected states
       renderMarkers();
     }
   };
@@ -696,185 +716,280 @@ const MapView = () => {
     },
   };
 
+  useImperativeHandle(ref, () => ({
+    exportMapAsImage: () => {
+      handleExportAsImage();
+    },
+  }));
+
+  const handleExportAsImage = async () => {
+    try {
+      const uploadDataUrl = await domtoimage.toPng(uploadRef.current, {
+        cacheBust: true,
+        style: { transform: 'scale(1)' },
+      });
+
+      const progressDataUrl = await domtoimage.toPng(progressRef.current, {
+        cacheBust: true,
+        style: { transform: 'scale(1)' },
+      });
+
+      const mapCanvas = map.getCanvas();
+      const mapDataUrl = mapCanvas.toDataURL('image/png');
+
+      const sidebarDataUrl = await domtoimage.toPng(sidebarRef.current, {
+        cacheBust: true,
+        style: { transform: 'scale(1)' },
+      });
+
+      combineImages(uploadDataUrl, progressDataUrl, mapDataUrl, sidebarDataUrl);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    }
+  };
+
+  const combineImages = (uploadDataUrl, progressDataUrl, mapDataUrl, sidebarDataUrl) => {
+    const uploadImage = new Image();
+    uploadImage.src = uploadDataUrl;
+    uploadImage.crossOrigin = 'anonymous';
+
+    const progressImage = new Image();
+    progressImage.src = progressDataUrl;
+    progressImage.crossOrigin = 'anonymous';
+
+    const mapImage = new Image();
+    mapImage.src = mapDataUrl;
+    mapImage.crossOrigin = 'anonymous';
+
+    const sidebarImage = new Image();
+    sidebarImage.src = sidebarDataUrl;
+    sidebarImage.crossOrigin = 'anonymous';
+
+    Promise.all([
+      new Promise((resolve) => (uploadImage.onload = resolve)),
+      new Promise((resolve) => (progressImage.onload = resolve)),
+      new Promise((resolve) => (mapImage.onload = resolve)),
+      new Promise((resolve) => (sidebarImage.onload = resolve)),
+    ]).then(() => {
+      const leftWidth = Math.max(uploadImage.width, mapImage.width);
+      const totalHeight = uploadImage.height + progressImage.height + mapImage.height;
+      const totalWidth = leftWidth + sidebarImage.width;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = totalWidth;
+      canvas.height = Math.max(totalHeight, sidebarImage.height);
+      const ctx = canvas.getContext('2d');
+
+      ctx.drawImage(uploadImage, 0, 0);
+
+      ctx.drawImage(progressImage, 0, uploadImage.height);
+
+      ctx.drawImage(mapImage, 0, uploadImage.height + progressImage.height);
+
+      ctx.drawImage(sidebarImage, leftWidth, 0);
+
+      canvas.toBlob(
+        (blob) => {
+          const link = document.createElement('a');
+          link.download = 'map_view.jpg';
+          link.href = URL.createObjectURL(blob);
+          link.click();
+        },
+        'image/jpeg',
+        0.95
+      );
+    });
+  };
+
   return (
-    <div style={styles.container}>
-      <div ref={mapContainerRef} style={styles.map}></div>
-      <div style={styles.sidebar}>
-        <div style={styles.combinedBox}>
-          <div style={styles.progressContainer}>
-            <div style={styles.progressItem}>
-              <LoadingBar progress={progress.upload} />
-              <div style={styles.progressMessage}>{progressMessages.upload}</div>
+    <div ref={containerRef} style={styles.container}>
+      <div style={styles.leftContainer}>
+        <div style={styles.topLeftContainer}>
+          <div ref={uploadRef} style={styles.uploadContainer}>
+            <div style={styles.section}>
+              <h3 style={styles.sectionTitle}>Upload Data</h3>
+              <input
+                type="file"
+                accept=".json, .csv"
+                onChange={handleFileUpload}
+                style={styles.fileInput}
+              />
             </div>
-            <div style={styles.progressItem}>
-              <LoadingBar progress={progress.preprocess} />
-              <div style={styles.progressMessage}>{progressMessages.preprocess}</div>
-            </div>
-            {dataNeedsGeocoding && (
-              <div style={styles.progressItem}>
-                <LoadingBar progress={progress.geocode} />
-                <div style={styles.progressMessage}>{progressMessages.geocode}</div>
-              </div>
-            )}
           </div>
 
-          {/* Upload Data Section */}
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>Upload Data</h3>
-            <input
-              type="file"
-              accept=".json, .csv"
-              onChange={handleFileUpload}
-              style={styles.fileInput}
-            />
-          </div>
-          {geoData.length > 0 && stateList.length > 0 && !markersAdded && (
+          <div style={styles.datasetContainer}>
             <div style={styles.section}>
-              <button
-                onClick={renderMarkers}
-                style={{
-                  ...styles.chartButton,
-                  backgroundColor: '#17a2b8',
-                  width: '100%',
-                }}
-              >
-                Mark Locations on Map
-              </button>
-            </div>
-          )}
-
-          {/* Dataset Details Section */}
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>Dataset Details</h3>
-            {geoData.length > 0 ? (
-              <div style={styles.datasetDetails}>
-                <p>
-                  <strong>Rows:</strong> {totalRows}
-                </p>
-                <p>
-                  <strong>Columns:</strong> {totalColumns}
-                </p>
-                <p>
-                  <strong>Numeric Columns:</strong> {numericHeaders.join(', ')}
-                </p>
-                <p>
-                  <strong>String Columns:</strong> {stringHeaders.join(', ')}
-                </p>
-              </div>
-            ) : (
-              <p>No dataset uploaded yet.</p>
-            )}
-          </div>
-
-          {/* Location Comparison Section */}
-          {stateList.length >= 2 ? (
-            <div style={styles.section}>
-              <h3 style={styles.sectionTitle}>Compare Two States</h3>
-              <div style={styles.inputGroup}>
-                <label style={styles.inputLabel}>State 1:</label>
-                <select
-                  value={selectedState1}
-                  onChange={(e) => setSelectedState1(e.target.value)}
-                  style={styles.selectDropdown}
-                  disabled={stateList.length === 0}
-                >
-                  <option value="">Select State</option>
-                  {stateList.map((state) => (
-                    <option key={state} value={state}>
-                      {state}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={styles.inputGroup}>
-                <label style={styles.inputLabel}>State 2:</label>
-                <select
-                  value={selectedState2}
-                  onChange={(e) => setSelectedState2(e.target.value)}
-                  style={styles.selectDropdown}
-                  disabled={stateList.length === 0}
-                >
-                  <option value="">Select State</option>
-                  {stateList.map((state) => (
-                    <option key={state} value={state}>
-                      {state}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                onClick={handleStateSelection}
-                disabled={!selectedState1 || !selectedState2}
-                style={{
-                  ...styles.chartButton,
-                  backgroundColor:
-                    selectedState1 && selectedState2 ? '#28a745' : '#6c757d',
-                }}
-              >
-                Compare
-              </button>
-            </div>
-          ) : geoData.length > 0 ? (
-            <div style={styles.section}>
-              <h3 style={styles.sectionTitle}>Compare Two States</h3>
-              <p style={{ color: '#6c757d' }}>
-                Comparison is Enabled when the dataset contains at least two unique states.
-              </p>
-            </div>
-          ) : null}
-
-          {/* Chart Type Selection Section */}
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>Select Chart Type</h3>
-            <div style={styles.chartOptions}>
-              <button
-                onClick={() => setChartType('Bar')}
-                style={{
-                  ...styles.chartButton,
-                  ...(chartType === 'Bar' ? styles.chartButtonActive : {}),
-                }}
-              >
-                Bar Chart
-              </button>
-              <button
-                onClick={() => setChartType('Pie')}
-                style={{
-                  ...styles.chartButton,
-                  ...(chartType === 'Pie' ? styles.chartButtonActive : {}),
-                }}
-              >
-                Pie Chart
-              </button>
-              <button
-                onClick={() => setChartType('Doughnut')}
-                style={{
-                  ...styles.chartButton,
-                  ...(chartType === 'Doughnut' ? styles.chartButtonActive : {}),
-                }}
-              >
-                Doughnut Chart
-              </button>
-              <button
-                onClick={() => setChartType('PolarArea')}
-                style={{
-                  ...styles.chartButton,
-                  ...(chartType === 'PolarArea' ? styles.chartButtonActive : {}),
-                }}
-              >
-                PolarArea Chart
-              </button>
+              <h3 style={styles.sectionTitle}>Dataset Details</h3>
+              {geoData.length > 0 ? (
+                <div style={styles.datasetDetails}>
+                  <p>
+                    <strong>Rows:</strong> {totalRows}
+                  </p>
+                  <p>
+                    <strong>Columns:</strong> {totalColumns}
+                  </p>
+                  <p>
+                    <strong>Numeric Columns:</strong> {numericHeaders.join(', ')}
+                  </p>
+                  <p>
+                    <strong>String Columns:</strong> {stringHeaders.join(', ')}
+                  </p>
+                </div>
+              ) : (
+                <p>No dataset uploaded yet.</p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Chart Display Section */}
+        <div ref={progressRef} style={styles.progressContainer}>
+          <div style={styles.progressItem}>
+            <LoadingBar progress={progress.upload} />
+            <div style={styles.progressMessage}>{progressMessages.upload}</div>
+          </div>
+          <div style={styles.progressItem}>
+            <LoadingBar progress={progress.preprocess} />
+            <div style={styles.progressMessage}>{progressMessages.preprocess}</div>
+          </div>
+          {dataNeedsGeocoding && (
+            <div style={styles.progressItem}>
+              <LoadingBar progress={progress.geocode} />
+              <div style={styles.progressMessage}>{progressMessages.geocode}</div>
+            </div>
+          )}
+        </div>
+
+        {geoData.length > 0 && stateList.length > 0 && !markersAdded && (
+          <div style={styles.buttonContainer}>
+            <button
+              onClick={renderMarkers}
+              style={{
+                ...styles.chartButton,
+                backgroundColor: '#17a2b8',
+                width: '100%',
+              }}
+            >
+              Mark Locations on Map
+            </button>
+          </div>
+        )}
+
+        <div style={styles.mapContainer}>
+          <div ref={mapContainerRef} style={styles.map}></div>
+        </div>
+      </div>
+
+      <div ref={sidebarRef} style={styles.sidebar}>
+        {stateList.length >= 2 ? (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Compare Two States</h3>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>State 1:</label>
+              <select
+                value={selectedState1}
+                onChange={(e) => setSelectedState1(e.target.value)}
+                style={styles.selectDropdown}
+                disabled={stateList.length === 0}
+              >
+                <option value="">Select State</option>
+                {stateList.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>State 2:</label>
+              <select
+                value={selectedState2}
+                onChange={(e) => setSelectedState2(e.target.value)}
+                style={styles.selectDropdown}
+                disabled={stateList.length === 0}
+              >
+                <option value="">Select State</option>
+                {stateList.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleStateSelection}
+              disabled={!selectedState1 || !selectedState2}
+              style={{
+                ...styles.chartButton,
+                backgroundColor:
+                  selectedState1 && selectedState2 ? '#28a745' : '#6c757d',
+              }}
+            >
+              Compare
+            </button>
+          </div>
+        ) : geoData.length > 0 ? (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Compare Two States</h3>
+            <p style={{ color: '#6c757d' }}>
+              Comparison is enabled when the dataset contains at least two unique states.
+            </p>
+          </div>
+        ) : null}
+
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Select Chart Type</h3>
+          <div style={styles.chartOptions}>
+            <button
+              onClick={() => setChartType('Bar')}
+              style={{
+                ...styles.chartButton,
+                ...(chartType === 'Bar' ? styles.chartButtonActive : {}),
+              }}
+            >
+              Bar Chart
+            </button>
+            <button
+              onClick={() => setChartType('Pie')}
+              style={{
+                ...styles.chartButton,
+                ...(chartType === 'Pie' ? styles.chartButtonActive : {}),
+              }}
+            >
+              Pie Chart
+            </button>
+            <button
+              onClick={() => setChartType('Doughnut')}
+              style={{
+                ...styles.chartButton,
+                ...(chartType === 'Doughnut' ? styles.chartButtonActive : {}),
+              }}
+            >
+              Doughnut Chart
+            </button>
+            <button
+              onClick={() => setChartType('PolarArea')}
+              style={{
+                ...styles.chartButton,
+                ...(chartType === 'PolarArea' ? styles.chartButtonActive : {}),
+              }}
+            >
+              PolarArea Chart
+            </button>
+          </div>
+        </div>
+
         {chartData && (
           <div style={styles.chartContainer}>
             <div style={styles.chartWrapper}>
               <div style={styles.chartContent}>
                 <h3>{chartType} Chart</h3>
-                {chartType === 'Bar' && <Bar data={chartData} options={chartOptions} />}
-                {chartType === 'Pie' && <Pie data={chartData} options={chartOptions} />}
+                {chartType === 'Bar' && (
+                  <Bar data={chartData} options={chartOptions} />
+                )}
+                {chartType === 'Pie' && (
+                  <Pie data={chartData} options={chartOptions} />
+                )}
                 {chartType === 'Doughnut' && (
                   <Doughnut data={chartData} options={chartOptions} />
                 )}
@@ -888,6 +1003,6 @@ const MapView = () => {
       </div>
     </div>
   );
-};
+});
 
 export default MapView;

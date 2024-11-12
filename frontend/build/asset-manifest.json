@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "/static/css/main.aa5214ac.css",
+    "main.js": "/static/js/main.5760d3a0.js",
+    "static/media/custom-marker-yellow.png": "/static/media/custom-marker-yellow.a33899480d28cf03b248.png",
+    "static/media/custom-marker-blue.png": "/static/media/custom-marker-blue.83a0d90f8bf25752f22c.png",
+    "static/media/custom-marker-red.png": "/static/media/custom-marker-red.250b4b94de123b720a26.png",
+    "index.html": "/index.html",
+    "main.aa5214ac.css.map": "/static/css/main.aa5214ac.css.map",
+    "main.5760d3a0.js.map": "/static/js/main.5760d3a0.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.aa5214ac.css",
+    "static/js/main.5760d3a0.js"
+  ]
+}

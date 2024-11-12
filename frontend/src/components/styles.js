@@ -1,27 +1,59 @@
+
+
 const styles = {
   container: {
     display: 'flex',
+    flexDirection: 'row',
     height: '100vh',
+  },
+  leftContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '65%', // Adjust as needed
+  },
+  topLeftContainer: {
+    display: 'flex',
+    flexDirection: 'row',
+    padding: '10px',
+    backgroundColor: '#f7f9fc',
+    borderBottom: '2px solid #ddd',
+    alignItems: 'stretch', // Ensure children stretch to same height
+  },
+  uploadContainer: {
+    flex: '1',
+    marginRight: '10px',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  datasetContainer: {
+    flex: '1',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  progressContainer: {
+    padding: '10px',
+    backgroundColor: '#f7f9fc',
+    borderBottom: '2px solid #ddd',
+  },
+  buttonContainer: {
+    padding: '10px',
+    backgroundColor: '#f7f9fc',
+    borderBottom: '2px solid #ddd',
+  },
+  mapContainer: {
+    flex: '1',
+    display: 'flex',
   },
   map: {
-    width: '65%',
-    height: '100vh',
+    flex: '1',
+    height: '100%',
   },
   sidebar: {
-    width: '45%',
+    width: '35%',
     padding: '5px',
     overflowY: 'auto',
     backgroundColor: '#f7f9fc',
     borderLeft: '2px solid #ddd',
-  },
-  combinedBox: {
-    marginBottom: '10px',
-  },
-  progressContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    marginBottom: '10px',
   },
   progressItem: {
     marginBottom: '10px',
@@ -33,14 +65,17 @@ const styles = {
     color: '#555',
   },
   section: {
-    marginBottom: '5px',
-    padding: '2px',
+    flex: '1', // Make sections fill the available height
+    display: 'flex',
+    flexDirection: 'column',
+    marginBottom: '0', // Remove bottom margin to align heights
+    padding: '10px',
     backgroundColor: '#fff',
     borderRadius: '3px',
     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
   },
   sectionTitle: {
-    fontSize: '12px',
+    fontSize: '16px',
     fontWeight: 'bold',
     marginBottom: '5px',
     color: '#333',
@@ -48,12 +83,13 @@ const styles = {
   fileInput: {
     width: '100%',
     padding: '8px',
-    fontSize: '12px',
+    fontSize: '14px',
     borderRadius: '2px',
   },
   datasetDetails: {
-    fontSize: '12px',
+    fontSize: '14px',
     color: '#666',
+    flex: '1',
   },
   inputGroup: {
     marginBottom: '5px',
@@ -61,13 +97,13 @@ const styles = {
   inputLabel: {
     display: 'block',
     marginBottom: '5px',
-    fontSize: '12px',
+    fontSize: '14px',
     color: '#555',
   },
   selectDropdown: {
     width: '100%',
     padding: '8px',
-    fontSize: '12px',
+    fontSize: '14px',
     border: '1px solid #ccc',
     borderRadius: '4px',
   },
@@ -80,7 +116,7 @@ const styles = {
   chartButton: {
     flex: '1 1 calc(50% - 10px)',
     padding: '5px',
-    backgroundColor: '#007bff',
+    backgroundColor: '#386994',
     color: '#fff',
     border: 'none',
     cursor: 'pointer',
@@ -88,7 +124,7 @@ const styles = {
     borderRadius: '4px',
   },
   chartButtonActive: {
-    backgroundColor: '#0056b3',
+    backgroundColor: '#214457',
   },
   chartContainer: {
     marginTop: '20px',
