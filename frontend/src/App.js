@@ -1,31 +1,45 @@
-
 import React, { useRef } from 'react';
 import MapView from './components/MapView';
+import html2canvas from 'html2canvas';
 import './App.css';
 
 function App() {
-  const mapViewRef = useRef();
+  const appRef = useRef();
 
-  // Handler to export the map as JPG
-  const handleExportMap = () => {
-    if (mapViewRef.current) {
-      mapViewRef.current.exportMapAsImage();
+  // Handler to capture the current view and export it as JPG
+  const handleExportView = async () => {
+    if (appRef.current) {
+      try {
+        const canvas = await html2canvas(appRef.current, {
+          useCORS: true,
+          logging: true,
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95); // Get the data URL for JPG format
+        const link = document.createElement('a');
+        link.href = imgData;
+        link.download = 'current_view.jpg';
+        link.click();
+      } catch (error) {
+        console.error('Error capturing the current view:', error);
+        alert('Failed to export the current view. Please try again.');
+      }
     }
   };
 
   return (
-    <div>
+    <div ref={appRef}>
       <nav className="navbar" style={styles.navbar}>
         <h1 className="navbar-title" style={styles.navbarTitle}>
           GeoViz Explorer
         </h1>
         <div style={styles.navbarButtons}>
-          <button onClick={handleExportMap} style={styles.navButton}>
-            Export as JPG
+          <button onClick={handleExportView} style={styles.navButton}>
+            Export View as JPG
           </button>
         </div>
       </nav>
-      <MapView ref={mapViewRef} />
+      <MapView />
     </div>
   );
 }
