@@ -1,5 +1,3 @@
-
-
 import React, {
   useEffect,
   useState,
@@ -724,48 +722,72 @@ const MapView = forwardRef((props, ref) => {
 
   const handleExportAsImage = async () => {
     try {
+      // Force rendering of Mapbox canvas
+      map.triggerRepaint();
+  
+      // Add delay to ensure rendering
+      await new Promise((resolve) => setTimeout(resolve, 100));
+  
+      // Capture individual elements
       const uploadDataUrl = await domtoimage.toPng(uploadRef.current, {
         cacheBust: true,
-        style: { transform: 'scale(1)' },
+        style: {
+          transform: 'scale(1)',
+          display: 'block',
+          width: `${uploadRef.current.offsetWidth}px`,
+          height: `${uploadRef.current.offsetHeight}px`,
+        },
       });
-
+  
       const progressDataUrl = await domtoimage.toPng(progressRef.current, {
         cacheBust: true,
-        style: { transform: 'scale(1)' },
+        style: {
+          transform: 'scale(1)',
+          display: 'block',
+          width: `${progressRef.current.offsetWidth}px`,
+          height: `${progressRef.current.offsetHeight}px`,
+        },
       });
-
+  
       const mapCanvas = map.getCanvas();
-      const mapDataUrl = mapCanvas.toDataURL('image/png');
-
+      const mapDataUrl = mapCanvas.toDataURL('image/png'); // Ensure map canvas is captured
+  
       const sidebarDataUrl = await domtoimage.toPng(sidebarRef.current, {
         cacheBust: true,
-        style: { transform: 'scale(1)' },
+        style: {
+          transform: 'scale(1)',
+          display: 'block',
+          width: `${sidebarRef.current.offsetWidth}px`,
+          height: `${sidebarRef.current.offsetHeight}px`,
+        },
       });
-
+  
+      // Combine images
       combineImages(uploadDataUrl, progressDataUrl, mapDataUrl, sidebarDataUrl);
     } catch (error) {
       console.error('Export failed:', error);
       alert('Export failed. Please try again.');
     }
   };
+  
 
   const combineImages = (uploadDataUrl, progressDataUrl, mapDataUrl, sidebarDataUrl) => {
     const uploadImage = new Image();
     uploadImage.src = uploadDataUrl;
     uploadImage.crossOrigin = 'anonymous';
-
+  
     const progressImage = new Image();
     progressImage.src = progressDataUrl;
     progressImage.crossOrigin = 'anonymous';
-
+  
     const mapImage = new Image();
     mapImage.src = mapDataUrl;
     mapImage.crossOrigin = 'anonymous';
-
+  
     const sidebarImage = new Image();
     sidebarImage.src = sidebarDataUrl;
     sidebarImage.crossOrigin = 'anonymous';
-
+  
     Promise.all([
       new Promise((resolve) => (uploadImage.onload = resolve)),
       new Promise((resolve) => (progressImage.onload = resolve)),
@@ -775,20 +797,18 @@ const MapView = forwardRef((props, ref) => {
       const leftWidth = Math.max(uploadImage.width, mapImage.width);
       const totalHeight = uploadImage.height + progressImage.height + mapImage.height;
       const totalWidth = leftWidth + sidebarImage.width;
-
+  
       const canvas = document.createElement('canvas');
-      canvas.width = totalWidth;
-      canvas.height = Math.max(totalHeight, sidebarImage.height);
+      canvas.width = totalWidth * 2; // Double resolution
+      canvas.height = Math.max(totalHeight, sidebarImage.height) * 2;
       const ctx = canvas.getContext('2d');
-
+      ctx.scale(2, 2); // Scale for higher quality
+  
       ctx.drawImage(uploadImage, 0, 0);
-
       ctx.drawImage(progressImage, 0, uploadImage.height);
-
       ctx.drawImage(mapImage, 0, uploadImage.height + progressImage.height);
-
       ctx.drawImage(sidebarImage, leftWidth, 0);
-
+  
       canvas.toBlob(
         (blob) => {
           const link = document.createElement('a');
@@ -801,6 +821,7 @@ const MapView = forwardRef((props, ref) => {
       );
     });
   };
+  
 
   return (
     <div ref={containerRef} style={styles.container}>
@@ -1006,3 +1027,4 @@ const MapView = forwardRef((props, ref) => {
 });
 
 export default MapView;
+
